@@ -9,7 +9,6 @@ import shutil
 import pytesseract
 import img2pdf
 import ocrmypdf
-import signal
 
 from PIL import Image
 from dotenv import load_dotenv
@@ -85,8 +84,6 @@ def get_next_page_number(folder):
 
     return max(numbers) + 1
 
-def timeout_handler(signum, frame):
-    raise TimeoutError("OCR processing timed out")
 
 # =========================
 # BACKGROUND OCR PROCESS
@@ -217,27 +214,20 @@ def process_ocr(batch_folder, batch_id):
         # =========================
         print("STARTING OCRMY PDF...")
 
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(240)
 
-        try:
+        ocrmypdf.ocr(
+            temp_pdf_path,
+            pdf_path,
 
-            ocrmypdf.ocr(
-                temp_pdf_path,
-                pdf_path,
+            force_ocr=True,
 
-                force_ocr=True,
+            optimize=0,
 
-                optimize=0,
+            language="eng",
 
-                language="eng",
+            jobs=1
+        )
 
-                jobs=1
-            )
-
-        finally:
-
-            signal.alarm(0)
 
         print("OCRMY PDF FINISHED")
 
