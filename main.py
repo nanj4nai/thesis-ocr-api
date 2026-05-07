@@ -9,6 +9,7 @@ import shutil
 import pytesseract
 import img2pdf
 import ocrmypdf
+import signal
 
 from PIL import Image
 from dotenv import load_dotenv
@@ -23,13 +24,18 @@ supabase: Client = create_client(
     SUPABASE_KEY
 )
 
+app = FastAPI()
+
+@app.get("/")
+def root():
+    return {
+        "status": "OCR API RUNNING"
+    }
 if os.name == "nt":
 
     pytesseract.pytesseract.tesseract_cmd = (
         r"C:\Users\enna\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
     )
-
-app = FastAPI()
 
 UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "output"
@@ -79,10 +85,8 @@ def get_next_page_number(folder):
 
     return max(numbers) + 1
 
-
-# =========================
-# BACKGROUND OCR PROCESS
-# =========================
+def timeout_handler(signum, frame):
+    raise TimeoutError("OCR processing timed out")
 
 # =========================
 # BACKGROUND OCR PROCESS
@@ -136,6 +140,8 @@ def process_ocr(batch_folder, batch_id):
 
                 combined_text += cleaned_text + "\n\n"
 
+
+
                 # OPTIONAL:
                 # STORE PAGE OCR TEXT
                 try:
@@ -168,6 +174,12 @@ def process_ocr(batch_folder, batch_id):
             except Exception as e:
 
                 print("OCR ERROR:", e)
+
+        if not combined_text.strip():
+
+            raise Exception(
+                "OCR failed: no text extracted from images"
+            )
 
         # =========================
         # CREATE TEMP PDF
@@ -203,20 +215,31 @@ def process_ocr(batch_folder, batch_id):
         # =========================
         # OCR SEARCHABLE PDF
         # =========================
+        print("STARTING OCRMY PDF...")
 
-        ocrmypdf.ocr(
-            temp_pdf_path,
-            pdf_path,
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(240)
 
-            force_ocr=True,
+        try:
 
-            deskew=True,
-            optimize=3,
+            ocrmypdf.ocr(
+                temp_pdf_path,
+                pdf_path,
 
-            language="eng",
+                force_ocr=True,
 
-            jobs=1
-        )
+                optimize=0,
+
+                language="eng",
+
+                jobs=1
+            )
+
+        finally:
+
+            signal.alarm(0)
+
+        print("OCRMY PDF FINISHED")
 
         print("SEARCHABLE OCR PDF CREATED")
 
