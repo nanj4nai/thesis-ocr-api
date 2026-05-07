@@ -8,3 +8,5 @@ PyPDF2
 requests
 gunicorn
 python-dotenv
+ocrmypdf
+supabase
