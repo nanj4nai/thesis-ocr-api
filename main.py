@@ -209,14 +209,13 @@ def process_ocr(batch_folder, batch_id):
             pdf_path,
 
             force_ocr=True,
-            skip_text=True,
 
             deskew=True,
             optimize=3,
 
             language="eng",
 
-            jobs=4
+            jobs=1
         )
 
         print("SEARCHABLE OCR PDF CREATED")
