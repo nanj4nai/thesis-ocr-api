@@ -251,7 +251,7 @@ def process_ocr(batch_folder, batch_id):
                 file=f,
                 file_options={
                     "content-type": "application/pdf",
-                    "upsert": "true"
+                    "upsert": True
                 }
             )
 
