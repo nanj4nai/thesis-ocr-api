@@ -196,7 +196,6 @@ def process_ocr(batch_folder, batch_id):
             pdf_path,
 
             force_ocr=True,
-            skip_text=True,
 
             optimize=0,
 
@@ -207,7 +206,6 @@ def process_ocr(batch_folder, batch_id):
             deskew=True,
             rotate_pages=True
         )
-
         print("OCRMY PDF FINISHED")
         print("SEARCHABLE OCR PDF CREATED")
 
