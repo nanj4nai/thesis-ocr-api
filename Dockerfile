@@ -1,22 +1,26 @@
 FROM python:3.11-slim
 
-# Install system packages
+# Install OCR system dependencies
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     ghostscript \
     qpdf \
+    pngquant \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy files
-COPY . /app
+# Copy requirements first (better Docker caching)
+COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port
+# Copy project files
+COPY . .
+
+# Expose Render port
 EXPOSE 10000
 
 # Start FastAPI

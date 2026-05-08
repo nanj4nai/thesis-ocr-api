@@ -1,8 +1,6 @@
-from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, Request
+from fastapi import FastAPI, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
-from typing import List
 from supabase import create_client, Client
-from fastapi import Request
 from datetime import datetime
 
 import os
@@ -12,6 +10,10 @@ import ocrmypdf
 import fitz
 
 from dotenv import load_dotenv
+
+# =========================
+# LOAD ENV
+# =========================
 
 load_dotenv()
 
@@ -23,6 +25,10 @@ supabase: Client = create_client(
     SUPABASE_KEY
 )
 
+# =========================
+# FASTAPI
+# =========================
+
 app = FastAPI()
 
 @app.api_route("/", methods=["GET", "HEAD"])
@@ -31,6 +37,9 @@ def root():
         "status": "OCR API RUNNING"
     }
 
+# =========================
+# DIRECTORIES
+# =========================
 
 UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "output"
@@ -38,12 +47,11 @@ OUTPUT_DIR = "output"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-
 # =========================
 # CLEAN OCR TEXT
 # =========================
 
-def clean_text(text):
+def clean_text(text: str) -> str:
     return " ".join(text.split())
 
 # =========================
@@ -52,20 +60,26 @@ def clean_text(text):
 
 def update_job(batch_id, data):
 
-    data["updated_at"] = datetime.utcnow().isoformat()
+    try:
 
-    if (
-        data.get("status") == "completed" or
-        data.get("status") == "failed"
-    ):
-        data["mysql_synced"] = False
+        data["updated_at"] = datetime.utcnow().isoformat()
 
-    supabase.table("ocr_jobs").update(
-        data
-    ).eq(
-        "batch_id",
-        batch_id
-    ).execute()
+        if (
+            data.get("status") == "completed" or
+            data.get("status") == "failed"
+        ):
+            data["mysql_synced"] = False
+
+        supabase.table("ocr_jobs").update(
+            data
+        ).eq(
+            "batch_id",
+            batch_id
+        ).execute()
+
+    except Exception as e:
+
+        print("UPDATE JOB ERROR:", e)
 
 # =========================
 # GET NEXT PAGE NUMBER
@@ -100,14 +114,18 @@ def get_next_page_number(folder):
 
     return max(numbers) + 1
 
-
 # =========================
 # BACKGROUND OCR PROCESS
 # =========================
 
 def process_ocr(batch_folder, batch_id):
 
+    temp_pdf_path = None
+    pdf_path = None
+
     try:
+
+        print(f"\nSTARTING OCR PROCESS: {batch_id}")
 
         # =========================
         # GET ALL IMAGES
@@ -133,7 +151,7 @@ def process_ocr(batch_folder, batch_id):
 
             return
 
-        total_images = len(all_images)
+        print(f"TOTAL IMAGES: {len(all_images)}")
 
         # =========================
         # CREATE TEMP PDF
@@ -174,20 +192,23 @@ def process_ocr(batch_folder, batch_id):
         print("STARTING OCRMY PDF...")
 
         ocrmypdf.ocr(
-            temp_pdf_path,
-            pdf_path,
+            input_file=temp_pdf_path,
+            output_file=pdf_path,
 
             force_ocr=True,
+            skip_text=True,
 
             optimize=0,
 
             language="eng",
 
-            jobs=1
+            jobs=1,
+
+            deskew=True,
+            rotate_pages=True
         )
 
         print("OCRMY PDF FINISHED")
-
         print("SEARCHABLE OCR PDF CREATED")
 
         # =========================
@@ -207,6 +228,8 @@ def process_ocr(batch_folder, batch_id):
 
             total_pages = len(doc)
 
+            print(f"TOTAL PDF PAGES: {total_pages}")
+
             for index, page in enumerate(doc):
 
                 text = page.get_text()
@@ -214,6 +237,10 @@ def process_ocr(batch_folder, batch_id):
                 cleaned_text = clean_text(text)
 
                 combined_text += cleaned_text + "\n\n"
+
+                # =========================
+                # SAVE PAGE OCR
+                # =========================
 
                 try:
 
@@ -244,6 +271,16 @@ def process_ocr(batch_folder, batch_id):
 
             raise Exception(
                 "Failed extracting searchable text"
+            )
+
+        # =========================
+        # VALIDATE TEXT
+        # =========================
+
+        if not combined_text.strip():
+
+            raise Exception(
+                "No searchable text extracted from PDF"
             )
 
         # =========================
@@ -288,35 +325,43 @@ def process_ocr(batch_folder, batch_id):
             "ocr_text": combined_text
         })
 
-        # =========================
-        # CLEANUP
-        # =========================
-
-        try:
-
-            shutil.rmtree(batch_folder)
-
-        except Exception as e:
-
-            print("CLEANUP ERROR:", e)
-
-        try:
-
-            os.remove(temp_pdf_path)
-
-        except:
-            pass
-
         print("OCR COMPLETED:", batch_id)
 
     except Exception as e:
+
+        print("BACKGROUND OCR ERROR:", e)
 
         update_job(batch_id, {
             "status": "failed",
             "message": str(e)
         })
 
-        print("BACKGROUND OCR ERROR:", e)
+    finally:
+
+        # =========================
+        # CLEANUP
+        # =========================
+
+        try:
+
+            if os.path.exists(batch_folder):
+                shutil.rmtree(batch_folder)
+
+        except Exception as e:
+
+            print("BATCH CLEANUP ERROR:", e)
+
+        try:
+
+            if temp_pdf_path and os.path.exists(temp_pdf_path):
+                os.remove(temp_pdf_path)
+
+        except Exception as e:
+
+            print("TEMP PDF CLEANUP ERROR:", e)
+
+        print("BACKGROUND TASK FINISHED")
+
 # =========================
 # MAIN API
 # =========================
@@ -354,6 +399,17 @@ async def process_images(
         print("TITLE:", title)
         print("BATCH:", batch_id)
         print("IS FINAL:", is_final)
+
+        # =========================
+        # VALIDATION
+        # =========================
+
+        if not batch_id:
+
+            return JSONResponse({
+                "success": False,
+                "message": "Missing batch_id"
+            }, status_code=400)
 
         # =========================
         # EXTRACT IMAGES
@@ -431,7 +487,10 @@ async def process_images(
 
             page_number += 1
 
-        # ALWAYS CREATE/UPDATE JOB FIRST
+        # =========================
+        # CREATE / UPDATE JOB
+        # =========================
+
         supabase.table("ocr_jobs").upsert({
             "batch_id": batch_id,
             "status": "processing",
@@ -439,7 +498,7 @@ async def process_images(
             "message": "Receiving images",
             "mysql_synced": False
         }).execute()
-        
+
         # =========================
         # NOT FINAL YET
         # =========================
@@ -485,4 +544,3 @@ async def process_images(
             "success": False,
             "message": str(e)
         }, status_code=500)
-    
