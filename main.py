@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from typing import List
 from supabase import create_client, Client
 from fastapi import Request
+from datetime import datetime
 
 import os
 import shutil
@@ -50,6 +51,26 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 def clean_text(text):
     return " ".join(text.split())
 
+# =========================
+# UPDATE OCR JOB
+# =========================
+
+def update_job(batch_id, data):
+
+    data["updated_at"] = datetime.utcnow().isoformat()
+
+    if (
+        data.get("status") == "completed" or
+        data.get("status") == "failed"
+    ):
+        data["mysql_synced"] = False
+
+    supabase.table("ocr_jobs").update(
+        data
+    ).eq(
+        "batch_id",
+        batch_id
+    ).execute()
 
 # =========================
 # GET NEXT PAGE NUMBER
@@ -163,10 +184,10 @@ def process_ocr(batch_folder, batch_id):
                     f"({percent}%)"
                 )
 
-                supabase.table("ocr_jobs").update({
+                update_job(batch_id, {
                     "progress": percent,
                     "message": f"OCR page {index + 1} of {total_images}"
-                }).eq("batch_id", batch_id).execute()
+                })
 
             except Exception as e:
 
@@ -204,10 +225,10 @@ def process_ocr(batch_folder, batch_id):
             f"{batch_id}.pdf"
         )
 
-        supabase.table("ocr_jobs").update({
+        update_job(batch_id, {
             "progress": 80,
             "message": "Generating searchable PDF"
-        }).eq("batch_id", batch_id).execute()
+        })
 
         # =========================
         # OCR SEARCHABLE PDF
@@ -237,10 +258,10 @@ def process_ocr(batch_folder, batch_id):
         # UPLOAD PDF TO SUPABASE
         # =========================
 
-        supabase.table("ocr_jobs").update({
+        update_job(batch_id, {
             "progress": 90,
             "message": "Uploading PDF"
-        }).eq("batch_id", batch_id).execute()
+        })
 
         pdf_storage_path = f"{batch_id}/final.pdf"
 
@@ -267,13 +288,13 @@ def process_ocr(batch_folder, batch_id):
         # SAVE OCR TEXT
         # =========================
 
-        supabase.table("ocr_jobs").update({
+        update_job(batch_id, {
             "status": "completed",
             "progress": 100,
             "message": "OCR completed",
             "pdf_url": pdf_url,
             "ocr_text": combined_text
-        }).eq("batch_id", batch_id).execute()
+        })
 
         # =========================
         # CLEANUP
@@ -298,10 +319,10 @@ def process_ocr(batch_folder, batch_id):
 
     except Exception as e:
 
-        supabase.table("ocr_jobs").update({
+        update_job(batch_id, {
             "status": "failed",
             "message": str(e)
-        }).eq("batch_id", batch_id).execute()
+        })
 
         print("BACKGROUND OCR ERROR:", e)
 
@@ -425,7 +446,8 @@ async def process_images(
             "batch_id": batch_id,
             "status": "processing",
             "progress": 5,
-            "message": "Receiving images"
+            "message": "Receiving images",
+            "mysql_synced": False
         }).execute()
         
         # =========================
@@ -443,11 +465,11 @@ async def process_images(
         # START OCR
         # =========================
 
-        supabase.table("ocr_jobs").update({
+        update_job(batch_id, {
             "status": "processing",
             "progress": 15,
             "message": "Starting OCR processing"
-        }).eq("batch_id", batch_id).execute()
+        })
 
         background_tasks.add_task(
             process_ocr,
@@ -473,3 +495,4 @@ async def process_images(
             "success": False,
             "message": str(e)
         }, status_code=500)
+    
