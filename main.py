@@ -246,7 +246,7 @@ def process_ocr(batch_folder, batch_id):
 
             language="eng",
 
-            jobs=1
+            jobs=2
         )
 
 
