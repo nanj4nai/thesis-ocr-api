@@ -192,8 +192,8 @@ def process_ocr(batch_folder, batch_id):
         print("STARTING OCRMY PDF...")
 
         ocrmypdf.ocr(
-            input_file=temp_pdf_path,
-            output_file=pdf_path,
+            temp_pdf_path,
+            pdf_path,
 
             force_ocr=True,
             skip_text=True,
