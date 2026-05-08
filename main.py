@@ -7,11 +7,10 @@ from datetime import datetime
 
 import os
 import shutil
-import pytesseract
 import img2pdf
 import ocrmypdf
+import fitz
 
-from PIL import Image
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,11 +30,7 @@ def root():
     return {
         "status": "OCR API RUNNING"
     }
-if os.name == "nt":
 
-    pytesseract.pytesseract.tesseract_cmd = (
-        r"C:\Users\enna\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
-    )
 
 UPLOAD_DIR = "uploads"
 OUTPUT_DIR = "output"
@@ -131,77 +126,23 @@ def process_ocr(batch_folder, batch_id):
 
             print("NO IMAGES FOUND:", batch_id)
 
-            return
+            update_job(batch_id, {
+                "status": "failed",
+                "message": "No uploaded images found"
+            })
 
-        combined_text = ""
+            return
 
         total_images = len(all_images)
 
         # =========================
-        # OCR TEXT EXTRACTION
-        # =========================
-
-        for index, image_path in enumerate(all_images):
-
-            try:
-
-                with Image.open(image_path) as img:
-
-                    image = img.convert("RGB")
-
-                    text = pytesseract.image_to_string(
-                        image,
-                        lang="eng"
-                    )
-
-                cleaned_text = clean_text(text)
-
-                combined_text += cleaned_text + "\n\n"
-
-
-
-                # OPTIONAL:
-                # STORE PAGE OCR TEXT
-                try:
-
-                    supabase.table("ocr_pages").insert({
-                        "batch_id": batch_id,
-                        "page_number": index + 1,
-                        "extracted_text": cleaned_text
-                    }).execute()
-
-                except Exception as db_error:
-
-                    print("DB OCR PAGE ERROR:", db_error)
-
-                percent = int(
-                    10 + ((index + 1) / total_images) * 60
-                )
-
-                print(
-                    f"OCR {batch_id}: "
-                    f"{index + 1}/{total_images} "
-                    f"({percent}%)"
-                )
-
-                update_job(batch_id, {
-                    "progress": percent,
-                    "message": f"OCR page {index + 1} of {total_images}"
-                })
-
-            except Exception as e:
-
-                print("OCR ERROR:", e)
-
-        if not combined_text.strip():
-
-            raise Exception(
-                "OCR failed: no text extracted from images"
-            )
-
-        # =========================
         # CREATE TEMP PDF
         # =========================
+
+        update_job(batch_id, {
+            "progress": 20,
+            "message": "Creating PDF from images"
+        })
 
         temp_pdf_path = os.path.join(
             OUTPUT_DIR,
@@ -226,15 +167,11 @@ def process_ocr(batch_folder, batch_id):
         )
 
         update_job(batch_id, {
-            "progress": 80,
+            "progress": 40,
             "message": "Generating searchable PDF"
         })
 
-        # =========================
-        # OCR SEARCHABLE PDF
-        # =========================
         print("STARTING OCRMY PDF...")
-
 
         ocrmypdf.ocr(
             temp_pdf_path,
@@ -246,13 +183,68 @@ def process_ocr(batch_folder, batch_id):
 
             language="eng",
 
-            jobs=2
+            jobs=1
         )
-
 
         print("OCRMY PDF FINISHED")
 
         print("SEARCHABLE OCR PDF CREATED")
+
+        # =========================
+        # EXTRACT TEXT FROM PDF
+        # =========================
+
+        update_job(batch_id, {
+            "progress": 75,
+            "message": "Extracting searchable text"
+        })
+
+        combined_text = ""
+
+        try:
+
+            doc = fitz.open(pdf_path)
+
+            total_pages = len(doc)
+
+            for index, page in enumerate(doc):
+
+                text = page.get_text()
+
+                cleaned_text = clean_text(text)
+
+                combined_text += cleaned_text + "\n\n"
+
+                try:
+
+                    supabase.table("ocr_pages").insert({
+                        "batch_id": batch_id,
+                        "page_number": index + 1,
+                        "extracted_text": cleaned_text
+                    }).execute()
+
+                except Exception as db_error:
+
+                    print("DB OCR PAGE ERROR:", db_error)
+
+                percent = int(
+                    75 + ((index + 1) / total_pages) * 10
+                )
+
+                update_job(batch_id, {
+                    "progress": percent,
+                    "message": f"Extracting text page {index + 1} of {total_pages}"
+                })
+
+            doc.close()
+
+        except Exception as e:
+
+            print("PDF TEXT EXTRACTION ERROR:", e)
+
+            raise Exception(
+                "Failed extracting searchable text"
+            )
 
         # =========================
         # UPLOAD PDF TO SUPABASE
@@ -285,7 +277,7 @@ def process_ocr(batch_folder, batch_id):
         print("PUBLIC URL:", pdf_url)
 
         # =========================
-        # SAVE OCR TEXT
+        # SAVE OCR RESULT
         # =========================
 
         update_job(batch_id, {
@@ -325,8 +317,6 @@ def process_ocr(batch_folder, batch_id):
         })
 
         print("BACKGROUND OCR ERROR:", e)
-
-
 # =========================
 # MAIN API
 # =========================

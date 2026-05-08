@@ -2,11 +2,10 @@ fastapi
 uvicorn
 python-multipart
 pillow
-pytesseract
 img2pdf
-PyPDF2
 requests
 gunicorn
 python-dotenv
 ocrmypdf
 supabase
+pymupdf
