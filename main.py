@@ -8,6 +8,7 @@ import shutil
 import img2pdf
 import ocrmypdf
 import fitz
+import requests
 
 from dotenv import load_dotenv
 
@@ -90,6 +91,31 @@ def update_job(batch_id, data):
     except Exception as e:
 
         print("UPDATE JOB ERROR:", e)
+
+# =========================
+# TRIGGER PHP MYSQL SYNC
+# =========================
+
+def trigger_mysql_sync(batch_id):
+
+    try:
+
+        sync_url = (
+            "https://pct-ats.nanohub.page/"
+            f"sync_ocr_jobs.php?batch_id={batch_id}"
+        )
+
+        response = requests.get(
+            sync_url,
+            timeout=60
+        )
+
+        print("MYSQL SYNC STATUS:", response.status_code)
+        print("MYSQL SYNC RESPONSE:", response.text)
+
+    except Exception as e:
+
+        print("MYSQL SYNC ERROR:", e)
 
 # =========================
 # GET NEXT PAGE NUMBER
@@ -331,6 +357,12 @@ def process_ocr(batch_folder, batch_id):
             "ocr_text": combined_text
         })
 
+        # =========================
+        # TRIGGER MYSQL SYNC
+        # =========================
+
+        trigger_mysql_sync(batch_id)
+
         print("OCR COMPLETED:", batch_id)
 
     except Exception as e:
@@ -341,6 +373,12 @@ def process_ocr(batch_folder, batch_id):
             "status": "failed",
             "message": str(e)
         })
+
+        # =========================
+        # TRIGGER MYSQL SYNC
+        # =========================
+
+        trigger_mysql_sync(batch_id)
 
     finally:
 
