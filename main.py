@@ -2,7 +2,7 @@ from fastapi import FastAPI, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 from datetime import datetime
-
+from fastapi.middleware.cors import CORSMiddleware
 import os
 import shutil
 import img2pdf
@@ -30,6 +30,16 @@ supabase: Client = create_client(
 # =========================
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://pct-ats.nanohub.page"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def root():
@@ -415,7 +425,7 @@ async def process_images(
 
         for key, value in form.multi_items():
 
-            if key.startswith("images["):
+            if key == "images":
 
                 images.append(value)
 
