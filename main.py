@@ -96,27 +96,21 @@ def update_job(batch_id, data):
 # TRIGGER PHP MYSQL SYNC
 # =========================
 
-def trigger_mysql_sync(batch_id):
+def trigger_mysql_sync(batch_id, title, status):
+
+    url = "https://pct-ats.nanohub.page/sync_ocr_jobs.php"
+
+    payload = {
+        "batch_id": batch_id,
+        "title": title,
+        "status": status
+    }
 
     try:
-
-        sync_url = (
-            "https://pct-ats.nanohub.page/"
-            f"sync_ocr_jobs.php?batch_id={batch_id}"
-        )
-
-        response = requests.get(
-            sync_url,
-            timeout=60,
-            verify=False
-        )
-
-        print("MYSQL SYNC STATUS:", response.status_code)
-        print("MYSQL SYNC RESPONSE:", response.text)
-
+        requests.post(url, json=payload, timeout=10, verify=False)
+        print("WEBHOOK SENT")
     except Exception as e:
-
-        print("MYSQL SYNC ERROR:", e)
+        print("WEBHOOK ERROR:", e)
 
 # =========================
 # GET NEXT PAGE NUMBER
@@ -155,7 +149,7 @@ def get_next_page_number(folder):
 # BACKGROUND OCR PROCESS
 # =========================
 
-def process_ocr(batch_folder, batch_id):
+def process_ocr(batch_folder, batch_id, title):
 
     temp_pdf_path = None
     pdf_path = None
@@ -362,7 +356,11 @@ def process_ocr(batch_folder, batch_id):
         # TRIGGER MYSQL SYNC
         # =========================
 
-        trigger_mysql_sync(batch_id)
+        trigger_mysql_sync(
+            batch_id,
+            title,  # we don't have title in OCR step
+            "completed"
+        )
 
         print("OCR COMPLETED:", batch_id)
 
@@ -379,7 +377,11 @@ def process_ocr(batch_folder, batch_id):
         # TRIGGER MYSQL SYNC
         # =========================
 
-        trigger_mysql_sync(batch_id)
+        trigger_mysql_sync(
+            batch_id,
+            title,
+            "failed"
+        )
 
     finally:
 
@@ -568,9 +570,9 @@ async def process_images(
         background_tasks.add_task(
             process_ocr,
             batch_folder,
-            batch_id
+            batch_id,
+            title
         )
-
         # =========================
         # SUCCESS
         # =========================
