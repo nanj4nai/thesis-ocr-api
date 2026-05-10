@@ -107,7 +107,8 @@ def trigger_mysql_sync(batch_id):
 
         response = requests.get(
             sync_url,
-            timeout=60
+            timeout=60,
+            verify=False
         )
 
         print("MYSQL SYNC STATUS:", response.status_code)
