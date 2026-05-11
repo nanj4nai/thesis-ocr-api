@@ -550,21 +550,3 @@ async def process_images(
             "success": False,
             "message": str(e)
         }, status_code=500)
-    
-
-@app.get("/ocr_processed_jobs")
-def get_unsynced_jobs():
-    try:
-        # Pull only completed or failed jobs that are not yet synced to MySQL
-        data = supabase.table("ocr_jobs") \
-            .select("*") \
-            .or_("status.eq.completed,status.eq.failed") \
-            .eq("mysql_synced", False) \
-            .execute()
-
-        jobs = data.data  # list of jobs
-
-        return JSONResponse({"success": True, "jobs": jobs})
-
-    except Exception as e:
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
