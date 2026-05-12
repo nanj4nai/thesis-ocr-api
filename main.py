@@ -99,7 +99,7 @@ PHP_WEBHOOK_SECRET = os.getenv("PHP_WEBHOOK_SECRET")  # your_secret_key_here
 
 def notify_php_webhook(batch_id: str):
     try:
-        with httpx.Client(timeout=15) as client:
+        with httpx.Client(timeout=15, verify=False) as client:
             response = client.get(
                 PHP_WEBHOOK_URL,
                 params={
@@ -365,7 +365,7 @@ def process_ocr(batch_folder, batch_id):
             "status": "failed",
             "message": str(e)
         })
-        
+
         # ✅ ADD THIS TOO
         notify_php_webhook(batch_id)
 
