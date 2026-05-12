@@ -1,5 +1,7 @@
 from fastapi import FastAPI, BackgroundTasks, Request
+
 from fastapi.responses import JSONResponse
+
 from supabase import create_client, Client
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +10,7 @@ import shutil
 import img2pdf
 import ocrmypdf
 import fitz
+import httpx
 
 from dotenv import load_dotenv
 
@@ -90,6 +93,24 @@ def update_job(batch_id, data):
     except Exception as e:
 
         print("UPDATE JOB ERROR:", e)
+
+PHP_WEBHOOK_URL = os.getenv("PHP_WEBHOOK_URL")   # https://pct-ats.nanohub.page/ocr_webhook.php
+PHP_WEBHOOK_SECRET = os.getenv("PHP_WEBHOOK_SECRET")  # your_secret_key_here
+
+def notify_php_webhook(batch_id: str):
+    try:
+        with httpx.Client(timeout=15) as client:
+            response = client.get(
+                PHP_WEBHOOK_URL,
+                params={
+                    "secret": PHP_WEBHOOK_SECRET,
+                    "batch_id": batch_id
+                }
+            )
+            print(f"WEBHOOK RESPONSE [{response.status_code}]: {response.text}")
+    except Exception as e:
+        # Non-critical — OCR is already done, just log it
+        print(f"WEBHOOK CALL FAILED (non-critical): {e}")
 
 # =========================
 # GET NEXT PAGE NUMBER
@@ -333,6 +354,9 @@ def process_ocr(batch_folder, batch_id):
 
         print("OCR COMPLETED:", batch_id)
 
+        # ✅ ADD THIS
+        notify_php_webhook(batch_id)
+
     except Exception as e:
 
         print("BACKGROUND OCR ERROR:", e)
@@ -341,6 +365,9 @@ def process_ocr(batch_folder, batch_id):
             "status": "failed",
             "message": str(e)
         })
+        
+        # ✅ ADD THIS TOO
+        notify_php_webhook(batch_id)
 
     finally:
 
