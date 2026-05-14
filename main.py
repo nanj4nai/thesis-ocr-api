@@ -36,7 +36,9 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://pct-ats.nanohub.page"
+        "https://pct-ats.nanohub.page",
+        "https://nanohub.page",
+        "https://pct-ats.talk4fun.net",
     ],
     allow_credentials=True,
     allow_methods=["*"],
