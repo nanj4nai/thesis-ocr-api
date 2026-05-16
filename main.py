@@ -39,6 +39,7 @@ app.add_middleware(
         "https://pct-ats.nanohub.page",
         "https://nanohub.page",
         "https://pct-ats.talk4fun.net",
+        "https://pct.nanohub.page",
     ],
     allow_credentials=True,
     allow_methods=["*"],
